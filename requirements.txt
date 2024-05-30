@@ -1,0 +1,14 @@
+lmdb
+tqdm
+torch
+torchvision
+Pillow
+requests
+matplotlib
+imageio
+imageio-ffmpeg
+albumentations
+imgaug
+tensorboard
+Ninja
+#setuptools==59.5.0
