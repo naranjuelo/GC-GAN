@@ -21,7 +21,14 @@ Official implementation of Learning Gaze-aware Compositional GAN from Limited An
 
 #### Data preprocessing
 
-*Coming soon*
+We use [ETH-XGaze dataset](https://files.ait.ethz.ch/projects/xgaze/xucongzhang2020eccv.pdf) as the labaled dataset for training GC-GAN. It can be downloaded from https://ait.ethz.ch/xgaze.  
+The dataset contains raw high-resolution images and already preprocessed images. We use these preprocessed images in our experiments and four camera perspectives.
+
+Once the data is downloaded, we need to have two folders, one containing RGB images and another containing the corresponding segmentation masks with the same file names (pixel values correspond to face component ID).
+The .h5 files from the ETH-XGaze dataset can be processed with the following command:
+
+``python data/segment_face_db_ethx.py  /data_dir/ /prep_data_dir/rgb /prep_data_dir/mask ``
+
 
 #### Training dataset preparation
 
@@ -29,7 +36,7 @@ Training dataset preparation requires the following two steps.
 
 1 - Prepare dataset: we use LMDB datasets for training, which can be generated with the following command:
 
-``python prepare_mask_data.py /rgb_images_folder_path /mask_images_folder_path --out=/dataset_lmdb/ --size=256``
+``python prepare_mask_data.py /prep_data_dir/rgb /prep_data_dir/mask --out=/dataset_lmdb/ --size=256``
 
 This command will save the lmdb dataset in the path defined as argument (--out) as well as a labels_gaze.npy file with gaze labels information.
 
