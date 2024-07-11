@@ -48,18 +48,42 @@ This command will save the lmdb dataset in the path defined as argument (--out) 
 
 Train GC-GAN with gaze-annotated data
 
-``python train_conditional.py --dataset=/dataset_lmdb --inception=/dataset_lmdb.pkl --checkpoint_dir=ckpt_output --seg_dim=5 --size=256 --residual_refine --batch=2``
+``python train_conditional.py --dataset=/dataset_lmdb --inception=/dataset_lmdb.pkl --checkpoint_dir=ckpt_output --seg_dim=6 --size=256 --residual_refine --batch=2``
 
 The training output (checkpoints and generated images) will be saved in the path defined for checkpoint direction (--checkpoint_dir). The number of segmentation dimensions (--seg_dim) should be the same used when preprocessing data and generating segmentation masks.
 
-#### Training GC-GAN: unlabeled data
 
-*Coming soon*
+## Synthesis
 
-#### Generate synthetic samples
+#### Generate gaze-conditioned random images
 
-*Coming soon*
+We provide a script for sampling random images and their corresponding segmentation masks given a random gaze direction. The gaze direction is sampled from the training labels distribution (labels_gaze.npy is required). This can be done with the following command:
 
+``python generate/generate_conditional.py /path_to_model/xxx.pt --outdir=results --sample=8 --gaze_lbs=/path_to_db/labels_gaze.npy  --save_latent``
+
+By using the flag save_latent, the script will also save the local latent vector of each sample (.npy file).
+
+<p align="center">
+<img src="imgs/img_mask.jpg" width="300"/> 
+</p>
+
+#### Generate local latent interpolations
+
+We provide a script for visualizing the local interpolation of any face component or gaze, which can be done as follows:
+
+``python generate/generate_video_conditional.py /path_to_model/xxx.pt --outdir=results_interp --latent=results/000000_latent.npy --gaze_lbs=/path_to_db/labels_gaze.npy``
+
+The latent code (latent flag) can be any generated with the previous script (generate_conditional.py). The script generates different gifs in the
+output folder with the animation of each specific face component and gaze. The following examples show modifications on nose compontent and gaze direction.
+ 
+<p align="center">
+<img src="imgs/nose_interpolation.gif" width="300"/> 
+</p>
+
+<p align="center">
+<img src="imgs/gaze_interpolation1.gif" width="150"/> 
+<img src="imgs/gaze_interpolation2.gif" width="150"/> 
+</p>
 
 ### Credits
 
