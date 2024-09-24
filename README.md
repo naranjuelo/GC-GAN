@@ -29,6 +29,11 @@ The .h5 files from the ETH-XGaze dataset can be processed with the following com
 
 ``python data/segment_face_db_ethx.py  /data_dir/ /prep_data_dir/rgb /prep_data_dir/mask ``
 
+In case of using CelebA dataset for the second stage, first download the [dataset](https://github.com/switchablenorms/CelebAMask-HQ).
+Once downloaded, the same preprocessing can be done using the following command to generate output folders with rgb and mask images:
+
+``python data/segment_face_db_celeb.py  /data_dir/ /prep_data_dir/rgb /prep_data_dir/mask ``
+
 
 #### Training dataset preparation
 
@@ -44,7 +49,7 @@ This command will save the lmdb dataset in the path defined as argument (--out) 
 
 ``python prepare_inception_conditional.py /dataset_lmdb/ --output=/dataset_lmdb.pkl --size=256 --dataset_type=mask``
 
-#### Training GC-GAN: labeled data
+#### Training GC-GAN
 
 Train GC-GAN with gaze-annotated data
 
@@ -52,6 +57,15 @@ Train GC-GAN with gaze-annotated data
 
 The training output (checkpoints and generated images) will be saved in the path defined for checkpoint direction (--checkpoint_dir). The number of segmentation dimensions (--seg_dim) should be the same used when preprocessing data and generating segmentation masks.
 
+
+##### Training the second stage
+
+Train GC-GAN with unlabeled data, starting from the training checkpoint already generated in the first stage.
+
+``python train_conditional_stage2.py --dataset=/dataset_lmdb --inception=/dataset_lmdb.pkl --checkpoint_dir=ckpt_output --seg_dim=6 --size=256 --residual_refine --batch=2 --ckpt=/pretrained_ckpt_path/xxxx.pt --gaze_labels=/pretrained_lmdb_db/labels_gaze.npy``
+
+Additional parameters are: checkpoint pretrained with the labeled dataset (--ckpt) and pretraining dataset's gaze file (--gaze_labels), as labels are randomly selected from the training distribution.
+The training output (checkpoints and generated images) will be saved in the path defined for checkpoint direction (--checkpoint_dir). The number of segmentation dimensions (--seg_dim) should be the same used when preprocessing data and generating segmentation masks.
 
 ## Synthesis
 

@@ -25,6 +25,7 @@ import os
 import time
 
 import numpy as np
+import cv2
 import torch
 from torch import nn, autograd, optim
 from torch.nn import functional as F
@@ -32,12 +33,9 @@ from torch.utils import data
 from torchvision import transforms, utils
 from torch.utils.tensorboard import SummaryWriter
 
-from models import DualBranchDiscriminator_gaze, DualBranchDiscriminator
+from models import DualBranchDiscriminator
 from models import make_model_gaze
-from train import draw_gaze_single
-from utils.dataset import MaskDataset, MaskDataset_conditional
-
-from collections import OrderedDict
+from utils.dataset_conditional import MaskDataset_conditional
 
 from utils.distributed import (
     get_rank,
@@ -49,7 +47,7 @@ from utils.distributed import (
 
 import functools
 from utils.inception_utils import sample_gema_gaze, prepare_inception_metrics
-from visualize.utils import color_map
+from generate.utils import color_map
 import random
 
 
@@ -144,13 +142,13 @@ def mixing_noise(batch, latent_dim, prob, device):
     else:
         return [make_noise(batch, latent_dim, 1, device)]
 
-def generate_random_gaze(batch, device, db_labels):
+def generate_random_gaze(batch, db_labels):
     random_gazes = [db_labels[np.random.randint(len(db_labels))] for _ in range(batch)]
     for i, g in enumerate(random_gazes):
         random_gazes[i] = [float(random_gazes[i].split('_')[0]), float(random_gazes[i].split('_')[1])]
-    random_gazes_z = np.asarray(random_gazes_z)       
+    random_gazes_z = np.asarray(random_gazes)       
     random_gazes_z = torch.from_numpy(random_gazes_z)
-    return random_gazes
+    return random_gazes_z
 
 def color_segmap(sample_seg, color_map):
     sample_seg = torch.argmax(sample_seg, dim=1)
@@ -159,6 +157,23 @@ def color_segmap(sample_seg, color_map):
         sample_mask[sample_seg==key] = torch.tensor(color_map[key], dtype=torch.float)
     sample_mask = sample_mask.permute(0,3,1,2)
     return sample_mask
+
+def draw_gaze_single(img, pitchyaw, thickness=2, color=(0, 255, 255)):
+    """Draw gaze angle on given image with a given eye positions."""
+
+    image_out = img
+    (h, w) = img.shape[:2]
+    length = w / 2.0
+    pos = (int(h / 2.0), int(w / 2.0))
+    if len(image_out.shape) == 2 or image_out.shape[2] == 1:
+        image_out = cv2.cvtColor(image_out, cv2.COLOR_GRAY2BGR)
+    dx = -length * np.sin(pitchyaw[1]) * np.cos(pitchyaw[0])
+    dy = -length * np.sin(pitchyaw[0])
+    im_g = np.array(image_out).copy()
+    cv2.arrowedLine((im_g), tuple(np.round(pos).astype(np.int32)),
+                tuple(np.round([pos[0] + dx, pos[1] + dy]).astype(int)), color,
+                thickness, cv2.LINE_AA, tipLength=0.2)
+    return im_g
 
 def save_sample_image(folder, name, sample_img, global_step, writer=None, **kwargs):
     n_sample = len(sample_img)
@@ -198,9 +213,10 @@ def swap_masks(pretr_masks, gen_masks, unbroken):
 def train(args, ckpt_dir, loader, generator, generator_pretr, discriminator, g_optim, d_optim, g_ema, device, writer):
 
     get_inception_metrics = prepare_inception_metrics(args.inception, False)
+    db_gazes = np.load(args.gaze_labels, allow_pickle=True).item()
     # sample func for calculate FID
     sample_fn = functools.partial(sample_gema_gaze, g_ema=g_ema, device=device, 
-                        truncation=1.0, mean_latent=None, batch_size=args.batch)
+                        truncation=1.0, mean_latent=None, batch_size=args.batch, labels_gaze=db_gazes)
 
     loader = sample_data(loader)
     pbar = range(args.iter)
@@ -228,7 +244,7 @@ def train(args, ckpt_dir, loader, generator, generator_pretr, discriminator, g_o
     sample_z = torch.randn(args.n_sample, args.latent, device=device)
     
     db_gazes = np.load(args.gaze_labels, allow_pickle=True).item()
-    random_gazes_z = generate_random_gaze(args.n_sample, device, db_gazes)
+    random_gazes_z = generate_random_gaze(args.n_sample, db_gazes)
     random_gazes_z = random_gazes_z.to(device)
     transform = transforms.ToTensor()
 
@@ -253,7 +269,7 @@ def train(args, ckpt_dir, loader, generator, generator_pretr, discriminator, g_o
         requires_grad(discriminator, True)
 
         noise = mixing_noise(args.batch, args.latent, args.mixing, device)       
-        random_gazes = generate_random_gaze(args.batch, device, db_gazes)
+        random_gazes = generate_random_gaze(args.batch, db_gazes)
         random_gazes = random_gazes.to(device)
         
         fake_img, fake_seg = generator(noise, random_gazes)
@@ -300,7 +316,7 @@ def train(args, ckpt_dir, loader, generator, generator_pretr, discriminator, g_o
         requires_grad(discriminator, False)
 
         noise = mixing_noise(args.batch, args.latent, args.mixing, device)
-        random_gazes = generate_random_gaze(args.batch, device, db_gazes)
+        random_gazes = generate_random_gaze(args.batch, db_gazes)
         random_gazes = random_gazes.to(device)        
         fake_img, fake_seg, fake_seg_coarse, fake_dpths, fake_ltn = generator(noise, random_gazes, return_all=True)
         # generate mask with pretrained model in stage1 for given noise
@@ -337,7 +353,7 @@ def train(args, ckpt_dir, loader, generator, generator_pretr, discriminator, g_o
                 noise = [g_module.style(n) for n in noise]
                 latents = g_module.mix_styles(noise).clone()
             latents.requires_grad = True
-            random_gazes = generate_random_gaze(path_batch_size, device, db_gazes)
+            random_gazes = generate_random_gaze(path_batch_size, db_gazes)
             random_gazes = random_gazes.to(device)
             fake_img, fake_seg = generator([latents], random_gazes, input_is_latent=True)
 
